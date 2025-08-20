@@ -48,7 +48,6 @@ import {
     isCustomSqlDimension,
     isDateItem,
     isField,
-    isJwtUser,
     isMetric,
     isVizTableConfig,
     ItemsMap,
@@ -103,7 +102,6 @@ import type { ICacheService } from '../CacheService/ICacheService';
 import { CreateCacheResult } from '../CacheService/types';
 import { CsvService } from '../CsvService/CsvService';
 import { ExcelService } from '../ExcelService/ExcelService';
-import { PermissionsService } from '../PermissionsService/PermissionsService';
 import { PivotTableService } from '../PivotTableService/PivotTableService';
 import { getDashboardParametersValuesMap } from '../ProjectService/parameters';
 import {
@@ -142,7 +140,6 @@ type AsyncQueryServiceArguments = ProjectServiceArguments & {
     storageClient: S3ResultsFileStorageClient;
     pivotTableService: PivotTableService;
     prometheusMetrics?: PrometheusMetrics;
-    permissionsService: PermissionsService;
 };
 
 export class AsyncQueryService extends ProjectService {
@@ -160,8 +157,6 @@ export class AsyncQueryService extends ProjectService {
 
     prometheusMetrics?: PrometheusMetrics;
 
-    permissionsService: PermissionsService;
-
     constructor(args: AsyncQueryServiceArguments) {
         super(args);
         this.queryHistoryModel = args.queryHistoryModel;
@@ -171,7 +166,6 @@ export class AsyncQueryService extends ProjectService {
         this.storageClient = args.storageClient;
         this.pivotTableService = args.pivotTableService;
         this.prometheusMetrics = args.prometheusMetrics;
-        this.permissionsService = args.permissionsService;
     }
 
     // ! Duplicate of SavedSqlService.hasAccess
@@ -1364,16 +1358,6 @@ export class AsyncQueryService extends ProjectService {
         const { userAttributes, intrinsicUserAttributes } =
             await this.getUserAttributes({ account });
 
-        const { enabled: useExperimentalMetricCtes } =
-            await this.featureFlagModel.get({
-                user: {
-                    userUuid: account.user.id,
-                    organizationUuid: account.organization.organizationUuid,
-                    organizationName: account.organization.name,
-                },
-                featureFlagId: FeatureFlags.ShowQueryWarnings,
-            });
-
         const availableParameters = await this.getAvailableParameters(
             projectUuid,
             explore,
@@ -1387,7 +1371,6 @@ export class AsyncQueryService extends ProjectService {
             userAttributes,
             timezone: this.lightdashConfig.query.timezone || 'UTC',
             dateZoom,
-            useExperimentalMetricCtes,
             // ! TODO: Should validate the parameters to make sure they are valid from the options
             parameters,
             availableParameters,
@@ -1963,51 +1946,6 @@ export class AsyncQueryService extends ProjectService {
         };
     }
 
-    private async checkQueryPermissions(
-        account: Account,
-        projectUuid: string,
-        savedChartUuid: string,
-        space: Omit<SpaceSummary, 'userAccess'>,
-    ) {
-        if (isJwtUser(account)) {
-            await this.permissionsService.checkEmbedPermissions(
-                account,
-                savedChartUuid,
-            );
-        } else {
-            const access = await this.spaceModel.getUserSpaceAccess(
-                account.user.id,
-                space.uuid,
-            );
-
-            if (
-                account.user.ability.cannot(
-                    'view',
-                    subject('SavedChart', {
-                        organizationUuid: space.organizationUuid,
-                        projectUuid,
-                        isPrivate: space.isPrivate,
-                        access,
-                    }),
-                )
-            ) {
-                throw new ForbiddenError();
-            }
-        }
-
-        if (
-            account.user.ability.cannot(
-                'view',
-                subject('Project', {
-                    organizationUuid: space.organizationUuid,
-                    projectUuid,
-                }),
-            )
-        ) {
-            throw new ForbiddenError();
-        }
-    }
-
     async executeAsyncDashboardChartQuery({
         account,
         projectUuid,
@@ -2041,12 +1979,37 @@ export class AsyncQueryService extends ProjectService {
             ),
         ]);
 
-        await this.checkQueryPermissions(
-            account,
+        // Anonymous users cannot be assigned to a space,
+        // so they can only access public, `isPrivate: false` charts
+        const savedChartSubject = {
+            organizationUuid,
             projectUuid,
-            savedChart.uuid,
-            space,
-        );
+            isPrivate: space.isPrivate,
+            ...(account.isRegisteredUser()
+                ? {
+                      access: await this.spaceModel.getUserSpaceAccess(
+                          account.user.id,
+                          space.uuid,
+                      ),
+                  }
+                : {}),
+        };
+
+        if (
+            account.user.ability.cannot(
+                'view',
+                subject('SavedChart', savedChartSubject),
+            ) ||
+            account.user.ability.cannot(
+                'view',
+                subject('Project', {
+                    organizationUuid,
+                    projectUuid,
+                }),
+            )
+        ) {
+            throw new ForbiddenError();
+        }
 
         await this.analyticsModel.addChartViewEvent(
             savedChart.uuid,
