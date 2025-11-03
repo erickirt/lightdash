@@ -1,3 +1,22 @@
+## [0.2126.1](https://github.com/lightdash/lightdash/compare/0.2126.0...0.2126.1) (2025-11-03)
+
+
+### Bug Fixes
+
+* remove jwt from URL hash ([#17652](https://github.com/lightdash/lightdash/issues/17652)) ([788ffd2](https://github.com/lightdash/lightdash/commit/788ffd2157cb25d754b40b89f4f57589e8623e53)), closes [#150](https://github.com/lightdash/lightdash/issues/150)
+
+# [0.2126.0](https://github.com/lightdash/lightdash/compare/0.2125.1...0.2126.0) (2025-11-03)
+
+
+### Bug Fixes
+
+* dashboard validation error message types and frontend rendering ([#17785](https://github.com/lightdash/lightdash/issues/17785)) ([7fb3905](https://github.com/lightdash/lightdash/commit/7fb3905f7bb62b8bb40e134062726167f5e8d79b))
+
+
+### Features
+
+* detect dangling dashboard filters for tables not used by any chart ([#17777](https://github.com/lightdash/lightdash/issues/17777)) ([7b6bad9](https://github.com/lightdash/lightdash/commit/7b6bad90f3f2990a86b31b6dacc76072d7bdae4c))
+
 ## [0.2125.1](https://github.com/lightdash/lightdash/compare/0.2125.0...0.2125.1) (2025-10-31)
 
 
